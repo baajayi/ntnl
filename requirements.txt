@@ -108,10 +108,8 @@ nvidia-nvtx-cu12==12.1.105
 openai==1.35.13
 ordered-set==4.1.0
 orjson==3.10.6
-packaging @ file:///croot/packaging_1720101850331/work
 pandas==2.2.2
 pillow==10.4.0
-pluggy @ file:///work/perseverance-python-buildout/croot/pluggy_1698805497733/work
 proto-plus==1.24.0
 protobuf==4.25.3
 psutil==6.0.0
@@ -124,7 +122,6 @@ Pygments==2.18.0
 pymilvus==2.4.4
 pyparsing==3.1.2
 pypdf==4.2.0
-pytest @ file:///croot/pytest_1717793244625/work
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 python-iso639==2024.4.27
