@@ -2,5 +2,3 @@ flask
 flask_cors
 llama-index.core
 openai
-json
-os
