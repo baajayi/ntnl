@@ -49,7 +49,7 @@ def get_embeddings_for_text_chunks(text_chunks, model="text-embedding-ada-002"):
 # Function to save embeddings to a file
 def save_embeddings_to_npy(embeddings, filename):
     np.save(filename, embeddings)
-    print(f"Embeddings saved to {filename}")
+    # print(f"Embeddings saved to {filename}")
 
 # Function to load embeddings from a file
 def load_embeddings_from_npy(filename):
@@ -65,12 +65,12 @@ document_texts_file = 'ntnldocument_texts.json'
 
 # Load or generate embeddings
 if os.path.exists(embeddings_file) and os.path.exists(document_texts_file):
-    print("Loading existing embeddings and document texts...")
+    # print("Loading existing embeddings and document texts...")
     all_embeddings = load_embeddings_from_npy(embeddings_file)
     with open(document_texts_file, 'r') as f:
         document_texts = json.load(f)
 else:
-    print("Generating embeddings and document texts...")
+    # print("Generating embeddings and document texts...")
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future_docs = executor.submit(load_markdown_files, "MDFiles").result()
     docs.extend(future_docs)
@@ -81,13 +81,13 @@ else:
     for doc in docs:
         if hasattr(doc, 'text'):
             doc_text = doc.text
-            print(f"Processing document: {doc_text[:100]}...")  # Print first 100 characters for context
+            # print(f"Processing document: {doc_text[:100]}...")  # # print first 100 characters for context
             text_chunks = split_text(doc_text, max_tokens=8192)
             embeddings = get_embeddings_for_text_chunks(text_chunks)
             all_embeddings.extend(embeddings)
             document_texts.extend(text_chunks)
-        else:
-            print(f"Skipping non-text document: {doc}")
+       # else:
+            # print(f"Skipping non-text document: {doc}")
 
     # Save embeddings and texts
     save_embeddings_to_npy(all_embeddings, embeddings_file)
@@ -102,8 +102,8 @@ for embedding, text in zip(all_embeddings, document_texts):
         valid_embeddings.append(embedding)
         valid_texts.append(text)
 
-print(f"Total valid embeddings: {len(valid_embeddings)}")
-print(f"Total valid texts: {len(valid_texts)}")
+# print(f"Total valid embeddings: {len(valid_embeddings)}")
+# print(f"Total valid texts: {len(valid_texts)}")
 
 # Function to find similar documents based on embeddings
 def find_similar_documents(query_embedding, embeddings, texts, top_k=5):
