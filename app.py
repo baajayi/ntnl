@@ -9,6 +9,7 @@ import tiktoken
 import concurrent.futures
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
+from scipy.sparse import csr_matrix, save_npz, load_npz
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS
@@ -47,50 +48,43 @@ def get_embeddings_for_text_chunks(text_chunks, model="text-embedding-ada-002"):
     return embeddings
 
 # Function to save embeddings to a file
-def save_embeddings_to_npy(embeddings, filename):
-    np.save(filename, embeddings)
-    # print(f"Embeddings saved to {filename}")
+def save_embeddings_to_npz(embeddings, filename):
+    sparse_embeddings = csr_matrix(embeddings)
+    save_npz(filename, sparse_embeddings)
 
 # Function to load embeddings from a file
-def load_embeddings_from_npy(filename):
-    return np.load(filename, allow_pickle=True).tolist()
+def load_embeddings_from_npz(filename):
+    return load_npz(filename).toarray()
 
 # Function to check if embedding is valid
 def is_valid_embedding(embedding):
     return np.all(np.isfinite(embedding))
 
 # Filenames for embeddings and document texts
-embeddings_file = 'ntnlmbeddings.npy'
-document_texts_file = 'ntnldocument_texts.json'
+embeddings_file = 'embeddings.npz'
+document_texts_file = 'document_texts.json'
 
 # Load or generate embeddings
 if os.path.exists(embeddings_file) and os.path.exists(document_texts_file):
-    # print("Loading existing embeddings and document texts...")
-    all_embeddings = load_embeddings_from_npy(embeddings_file)
+    all_embeddings = load_embeddings_from_npz(embeddings_file)
     with open(document_texts_file, 'r') as f:
         document_texts = json.load(f)
 else:
-    # print("Generating embeddings and document texts...")
     with concurrent.futures.ThreadPoolExecutor() as executor:
         future_docs = executor.submit(load_markdown_files, "MDFiles").result()
     docs.extend(future_docs)
 
-    # Process each document
     all_embeddings = []
     document_texts = []
     for doc in docs:
         if hasattr(doc, 'text'):
             doc_text = doc.text
-            # print(f"Processing document: {doc_text[:100]}...")  # # print first 100 characters for context
             text_chunks = split_text(doc_text, max_tokens=8192)
             embeddings = get_embeddings_for_text_chunks(text_chunks)
             all_embeddings.extend(embeddings)
             document_texts.extend(text_chunks)
-       # else:
-            # print(f"Skipping non-text document: {doc}")
 
-    # Save embeddings and texts
-    save_embeddings_to_npy(all_embeddings, embeddings_file)
+    save_embeddings_to_npz(all_embeddings, embeddings_file)
     with open(document_texts_file, 'w') as f:
         json.dump(document_texts, f)
 
@@ -102,13 +96,8 @@ for embedding, text in zip(all_embeddings, document_texts):
         valid_embeddings.append(embedding)
         valid_texts.append(text)
 
-# print(f"Total valid embeddings: {len(valid_embeddings)}")
-# print(f"Total valid texts: {len(valid_texts)}")
-
 # Function to find similar documents based on embeddings
 def find_similar_documents(query_embedding, embeddings, texts, top_k=5):
-    if not embeddings:
-        raise ValueError("Embeddings array is empty.")
     similarities = cosine_similarity([query_embedding], embeddings)
     top_k_indices = np.argsort(similarities[0])[-top_k:][::-1]
     return [(texts[i], similarities[0][i]) for i in top_k_indices]
