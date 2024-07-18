@@ -5,115 +5,153 @@ from flask_cors import CORS
 from openai import OpenAI
 from llama_index.core import SimpleDirectoryReader
 from dotenv import load_dotenv, find_dotenv
+import tiktoken
+import concurrent.futures
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
+app = Flask(__name__)
+CORS(app)  # Enable CORS
 
 # Load environment variables
 _ = load_dotenv(find_dotenv())
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=openai_api_key)
+docs = []
 
-# Directory containing the data
-data_dir = 'data'
+# Function to load markdown files
+def load_markdown_files(directory):
+    reader = SimpleDirectoryReader(directory)
+    return reader.load_data()
 
-# Create a SimpleDirectoryReader instance
-reader = SimpleDirectoryReader(data_dir)
-
-# Read data from the directory
-documents = reader.load_data()
-
-# Function to chunk texts into smaller pieces
-def chunk_text(text, max_tokens=8000):
-    words = text.split()
+# Function to split text into chunks
+def split_text(text, max_tokens, encoding_name="cl100k_base"):
+    tokenizer = tiktoken.get_encoding(encoding_name)
+    tokens = tokenizer.encode(text)
+    
     chunks = []
-    current_chunk = []
-    current_tokens = 0
-
-    for word in words:
-        current_tokens += len(word) + 1  # +1 for the space
-        if current_tokens > max_tokens:
-            chunks.append(' '.join(current_chunk))
-            current_chunk = [word]
-            current_tokens = len(word) + 1
-        else:
-            current_chunk.append(word)
-
-    if current_chunk:
-        chunks.append(' '.join(current_chunk))
-
+    for i in range(0, len(tokens), max_tokens):
+        chunk_tokens = tokens[i:i + max_tokens]
+        chunks.append(tokenizer.decode(chunk_tokens))
+    
     return chunks
 
-# Function to get embeddings using OpenAI API
-def get_embeddings(texts):
-    all_embeddings = []
-    for text in texts:
-        chunks = chunk_text(text)
-        for chunk in chunks:
-            response = client.embeddings.create(
-                input=[chunk],
-                model='text-embedding-ada-002'
-            ).data[0].embedding
-            all_embeddings.append(response)
-    return all_embeddings
+# Function to get embeddings for text chunks
+def get_embeddings_for_text_chunks(text_chunks, model="text-embedding-ada-002"):
+    embeddings = []
+    for chunk in text_chunks:
+        response = client.embeddings.create(input=chunk, model=model)
+        embedding = response.data[0].embedding
+        embeddings.append(embedding)
+    return embeddings
 
-# Check if embeddings.json exists
-embeddings_file = 'embeddings.json'
-if os.path.exists(embeddings_file):
-    with open(embeddings_file, 'r') as f:
-        data = json.load(f)
-        texts = data['texts']
-        embeddings = data['embeddings']
+# Function to save embeddings to a file
+def save_embeddings_to_npy(embeddings, filename):
+    np.save(filename, embeddings)
+    print(f"Embeddings saved to {filename}")
+
+# Function to load embeddings from a file
+def load_embeddings_from_npy(filename):
+    return np.load(filename, allow_pickle=True).tolist()
+
+# Function to check if embedding is valid
+def is_valid_embedding(embedding):
+    return np.all(np.isfinite(embedding))
+
+# Filenames for embeddings and document texts
+embeddings_file = 'ntnlmbeddings.npy'
+document_texts_file = 'ntnldocument_texts.json'
+
+# Load or generate embeddings
+if os.path.exists(embeddings_file) and os.path.exists(document_texts_file):
+    print("Loading existing embeddings and document texts...")
+    all_embeddings = load_embeddings_from_npy(embeddings_file)
+    with open(document_texts_file, 'r') as f:
+        document_texts = json.load(f)
 else:
-    # Get embeddings for the documents
-    texts = [doc.text for doc in documents]
-    embeddings = get_embeddings(texts)
+    print("Generating embeddings and document texts...")
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_docs = executor.submit(load_markdown_files, "MDFiles").result()
+    docs.extend(future_docs)
 
-    # Save embeddings to file
-    with open(embeddings_file, 'w') as f:
-        json.dump({'texts': texts, 'embeddings': embeddings}, f)
+    # Process each document
+    all_embeddings = []
+    document_texts = []
+    for doc in docs:
+        if hasattr(doc, 'text'):
+            doc_text = doc.text
+            print(f"Processing document: {doc_text[:100]}...")  # Print first 100 characters for context
+            text_chunks = split_text(doc_text, max_tokens=8192)
+            embeddings = get_embeddings_for_text_chunks(text_chunks)
+            all_embeddings.extend(embeddings)
+            document_texts.extend(text_chunks)
+        else:
+            print(f"Skipping non-text document: {doc}")
 
-# Function to generate response using OpenAI GPT-3.5-turbo model with embeddings context
-def generate_response(query):
-    # Calculate query embedding
-    query_embedding = client.embeddings.create(
-        input=[query],
-        model='text-embedding-ada-002'
-    ).data[0].embedding
+    # Save embeddings and texts
+    save_embeddings_to_npy(all_embeddings, embeddings_file)
+    with open(document_texts_file, 'w') as f:
+        json.dump(document_texts, f)
 
-    # Function to calculate cosine similarity
-    def cosine_similarity(vec1, vec2):
-        dot_product = sum(p * q for p, q in zip(vec1, vec2))
-        magnitude1 = sum(p ** 2 for p in vec1) ** 0.5
-        magnitude2 = sum(q ** 2 for q in vec2) ** 0.5
-        if not magnitude1 or not magnitude2:
-            return 0
-        return dot_product / (magnitude1 * magnitude2)
+# Validate embeddings
+valid_embeddings = []
+valid_texts = []
+for embedding, text in zip(all_embeddings, document_texts):
+    if is_valid_embedding(embedding):
+        valid_embeddings.append(embedding)
+        valid_texts.append(text)
 
-    # Find the most similar embedding
-    similarities = [cosine_similarity(query_embedding, emb) for emb in embeddings]
-    most_similar_index = similarities.index(max(similarities))
+print(f"Total valid embeddings: {len(valid_embeddings)}")
+print(f"Total valid texts: {len(valid_texts)}")
 
-    # Use the most similar text as context
-    context = texts[most_similar_index]
+# Function to find similar documents based on embeddings
+def find_similar_documents(query_embedding, embeddings, texts, top_k=5):
+    if not embeddings:
+        raise ValueError("Embeddings array is empty.")
+    similarities = cosine_similarity([query_embedding], embeddings)
+    top_k_indices = np.argsort(similarities[0])[-top_k:][::-1]
+    return [(texts[i], similarities[0][i]) for i in top_k_indices]
 
-    response = client.chat.completions.create(
-        model='gpt-3.5-turbo',
-        messages=[
-            {'role': 'system', 'content': '''You are a helpful spiritual assistant.
-                                            You are a Lutheran Minister.
+# Function to generate response
+def get_retrieval_augmented_response(prompt, model="text-embedding-ada-002"):
+    query_embedding_response = client.embeddings.create(input=prompt, model=model)
+    query_embedding = query_embedding_response.data[0].embedding
+    similar_docs = find_similar_documents(query_embedding, valid_embeddings, valid_texts)
+
+    max_context_length = 8192
+    context = ""
+    total_length = 0
+    tokenizer = tiktoken.get_encoding("cl100k_base")
+    for doc, _ in similar_docs:
+        doc_length = len(tokenizer.encode(doc))
+        if total_length + doc_length <= max_context_length:
+            context += doc + " "
+            total_length += doc_length
+        else:
+            break
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": """You are a smart spiritual assistant.
+                                            You can synthesize ideas from the various parts of the context provided.
                                             You have a context of texts from the Lutheran Church.
+                                            Use the tone of a Lutheran Minister.
                                             Be warm and conversational.
                                             Personalize your response to the user.
-                                            Use the context to respond to the query.
-                                            If you find no relevant information in the context, say "I do not know the answer to that question."'''},
-            {'role': 'system', 'content': context},
-            {'role': 'user', 'content': query}
-        ]
-    )
-    return response.choices[0].message.content
-
-# Flask app setup
-app = Flask(__name__)
-CORS(app)
+                                            Use only the context to respond to the query.
+                                            If you find no relevant information in the context, say 'I do not know the answer to that question.'
+                                            Again, if you do not find any information relevant to the query in the context, respond with 'I do not know the answer to that question.'
+                                            """},
+                {"role": "system", "content": context.strip()},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"An error occurred: {str(e)}"
 
 @app.route('/')
 def index():
@@ -123,8 +161,8 @@ def index():
 def ask():
     data = request.get_json()
     query = data.get('query', '')
-    response = generate_response(query)
+    response = get_retrieval_augmented_response(query)
     return jsonify({"response": response})
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -59,13 +59,11 @@
             display: none;
         }
         #response {
+            width: 100%;
+            height: 200px; /* Expanded height for better visibility */
+            padding: 10px;
+            font-size: 1em;
             white-space: pre-wrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .show-more {
-            color: #4a90e2;
-            cursor: pointer;
         }
     </style>
 </head>
@@ -83,8 +81,7 @@
         </form>
         <div id="response-container">
             <h2>Response:</h2>
-            <textarea id="response" readonly rows="4"></textarea>
-            <span id="show-more" class="show-more">Show more</span>
+            <textarea id="response" readonly></textarea>
         </div>
     </div>
 
@@ -101,28 +98,8 @@
                     data: JSON.stringify({ query: query }),
                     success: function(data) {
                         let response = data.response;
-                        if (response.length > 200) {
-                            $('#response').val(response.substring(0, 200) + '...');
-                            $('#show-more').show();
-                        } else {
-                            $('#response').val(response);
-                            $('#show-more').hide();
-                        }
+                        $('#response').val(response);
                         $('#response-container').show();
-                    }
-                });
-            });
-
-            $('#show-more').on('click', function(){
-                let query = $('#query').val();
-                $.ajax({
-                    url: '/ask',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ query: query }),
-                    success: function(data) {
-                        $('#response').val(data.response);
-                        $('#show-more').hide();
                     }
                 });
             });
