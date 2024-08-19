@@ -151,6 +151,7 @@ def ask():
     data = request.get_json()
     query = data.get('query', '')
     response = get_retrieval_augmented_response(query)
+    print(f'{query}\n{response}')
     return jsonify({"response": response})
 
 if __name__ == "__main__":
