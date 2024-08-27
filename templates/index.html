@@ -15,32 +15,23 @@
             color: #333;
         }
         .header {
-            background-color: #4a90e2;
-            color: white;
-            padding: 20px;
             text-align: center;
-            position: relative;
-            height: 40vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            padding: 20px;
         }
         .header img {
-            max-width: 100px;
+            width: 391px;
+            height: 66px;
+            aspect-ratio: auto 391 / 66;
             margin-bottom: 20px;
         }
         .header h1 {
             margin: 0;
-            font-size: 2.5em;
-        }
-        .hero-shot {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            height: 150px;
-            background: url('placeholder-hero.jpg') no-repeat center center;
-            background-size: cover;
+            font-size: 2em; /* Adjusted font size for better visibility */
+            color: black; /* Changed heading color to black for visibility */
         }
         .container {
             padding: 20px;
@@ -54,6 +45,7 @@
             width: 100%;
             padding: 10px;
             font-size: 1em;
+            resize: vertical;
         }
         #response-container {
             display: none;
@@ -65,13 +57,34 @@
             font-size: 1em;
             white-space: pre-wrap;
         }
+        .footer {
+            text-align: center;
+            padding: 10px;
+            font-style: italic;
+            color: #666;
+            margin-top: 20px;
+        }
+        @media (max-width: 600px) {
+            .header img {
+                width: 80%; /* Adjust width for smaller screens */
+                height: auto; /* Maintain aspect ratio */
+            }
+            .header h1 {
+                font-size: 1.5em; /* Adjusted font size for smaller screens */
+            }
+            .container {
+                padding: 10px;
+            }
+            textarea, #response {
+                font-size: 0.9em;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <img src="logo-placeholder.png" alt="Logo">
+        <img src="https://149432795.v2.pressablecdn.com/wp-content/uploads/2017/05/cropped-ntnl-header.png" alt="Header Image">
         <h1>NTNL Spiritual Assistant</h1>
-        <div class="hero-shot"></div>
     </div>
     <div class="container">
         <form id="query-form">
@@ -83,6 +96,9 @@
             <h2>Response:</h2>
             <textarea id="response" readonly></textarea>
         </div>
+    </div>
+    <div class="footer">
+        Powered by SolaceAI
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
